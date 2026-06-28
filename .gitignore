@@ -3,6 +3,11 @@
 **/.env
 !**/.env.example
 
+# Local secrets and keys - never commit
+secrets.env
+*.pem
+*.local.*
+
 # Node
 node_modules/
 npm-debug.log*

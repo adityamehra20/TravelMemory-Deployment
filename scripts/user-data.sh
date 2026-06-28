@@ -20,9 +20,17 @@ export DEBIAN_FRONTEND=noninteractive
 APP_USER="ubuntu"
 APP_HOME="/home/${APP_USER}"
 
+# 0. Swap (t2.micro has only 1GB RAM; React build can OOM without this)
+if [ ! -f /swapfile ]; then
+  fallocate -l 2G /swapfile || dd if=/dev/zero of=/swapfile bs=1M count=2048
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
+
 # 1. System packages
 apt-get update -y
-apt-get upgrade -y
 curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
 apt-get install -y nodejs nginx git
 npm install -g pm2
