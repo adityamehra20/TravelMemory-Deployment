@@ -393,3 +393,52 @@ After DNS propagates, visit `https://www.<your-domain>.com`.
 
 > **Screenshots:** add yours under [`screenshots/`](screenshots/) and reference
 > them in [DEPLOYMENT.md](DEPLOYMENT.md) where placeholders are marked.
+
+---
+
+## Appendix A — Live Deployment (this submission)
+
+This repository was deployed end-to-end on AWS. Live, verified values:
+
+| Resource | Value |
+|----------|-------|
+| AWS account / region | `145678291577` / `ap-south-1` |
+| EC2 instance #1 | `i-0f063ccb3d08dad9a` — `ap-south-1a` — `65.1.136.12` |
+| EC2 instance #2 | `i-07c84e906535f48dd` — `ap-south-1b` — `13.233.80.192` |
+| Instance type | `t2.micro` (Ubuntu 22.04) |
+| Load Balancer | `travelmemory-alb` (internet-facing, **active**) |
+| ALB endpoint | `http://travelmemory-alb-376816329.ap-south-1.elb.amazonaws.com/` |
+| Target Group | `travelmemory-tg` (HTTP:80) — both targets **healthy** |
+| Database | MongoDB Atlas (managed) |
+| Reverse proxy | Nginx :80 → React build (static) + `/api` → Node :3000 (Pattern A) |
+
+**Verification (all HTTP 200):**
+
+```
+ALB  /          -> 200
+ALB  /api/trip  -> 200
+Instance1 /     -> 200
+Instance2 /     -> 200
+```
+
+See [`screenshots/VERIFICATION.txt`](screenshots/VERIFICATION.txt) for the raw
+AWS CLI output (instances, load balancer, target health) captured live, and
+[`screenshots/08-alb.png`](screenshots/08-alb.png) /
+[`screenshots/06-nginx.png`](screenshots/06-nginx.png) for the running app.
+
+### Final manual step — Cloudflare custom domain
+
+The custom domain is the only step requiring a registered domain you own. Once
+you add the domain to Cloudflare (section 7), create:
+
+| Type  | Name  | Target                                                       | Proxy   |
+|-------|-------|--------------------------------------------------------------|---------|
+| CNAME | `app` | `travelmemory-alb-376816329.ap-south-1.elb.amazonaws.com`    | Proxied |
+| A     | `@`   | `65.1.136.12` (frontend EC2 public IP)                       | Proxied |
+
+Then set SSL/TLS mode to **Full** and enable **Always Use HTTPS**.
+
+### Teardown (avoid charges)
+
+After grading, remove billable resources (ALB + 2× EC2). See the teardown
+commands in [RUNBOOK.md](RUNBOOK.md).
