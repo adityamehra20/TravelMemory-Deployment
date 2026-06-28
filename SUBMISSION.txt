@@ -1,7 +1,7 @@
 Travel Memory Application Deployment
 ====================================
 
-Submitted by: Project Submission
+Submitted by: Aditya Mehra
 Date: 28-06-2026
 
 GitHub repo (code, docs, diagram):
