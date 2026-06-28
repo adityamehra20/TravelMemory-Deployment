@@ -1,60 +1,74 @@
-# Deployment Walkthrough (with Screenshot Placeholders)
+# Deployment walkthrough
 
-Use this file as the narrative submission document. Follow each step in
-[README.md](README.md), capture the screenshots, and replace the placeholders
-below. Save the finished version as a PDF for Vlearn if required.
+This is the narrative version with screenshots. The full commands are in
+[README.md](README.md); here I'm just showing each stage worked. Screenshots live
+in the `screenshots/` folder.
 
-> Place image files in the [`screenshots/`](screenshots/) folder and keep the
-> filenames below, or update the links.
+A couple of the placeholders below (Cloudflare DNS, the live HTTPS domain) are
+from steps I documented but didn't run on the graded deployment, since I didn't
+have a domain to point at Cloudflare. The AWS side is all real and captured.
 
----
-
-## Step 1 — EC2 Instance Launched
+## 1. EC2 instance running
 ![EC2 instance running](screenshots/01-ec2-instance.png)
-*EC2 console showing the running instance, its public IPv4, and security group.*
 
-## Step 2 — SSH + Dependencies Installed
-![Node, Nginx, PM2 versions](screenshots/02-dependencies.png)
-*Terminal output of `node -v`, `nginx -v`, `pm2 -v`.*
+The instance up with its public IP and security group.
 
-## Step 3 — Backend Running on Port 3000
-![PM2 backend running](screenshots/03-backend-pm2.png)
-*`pm2 status` showing `travel-backend` online and a `curl localhost:3000/trip` response.*
+## 2. Dependencies installed
+![node, nginx, pm2 versions](screenshots/02-dependencies.png)
 
-## Step 4 — `.env` Configured
-![Backend .env](screenshots/04-backend-env.png)
-*`backend/.env` with MONGO_URI (redacted) and PORT=3000.*
+`node -v`, `nginx -v`, `pm2 -v` after the install.
 
-## Step 5 — Frontend Built & `url.js` Wired
-![Frontend build](screenshots/05-frontend-build.png)
-*`npm run build` success and `frontend/src/url.js` / `frontend/.env` contents.*
+## 3. Backend on port 3000
+![pm2 backend online](screenshots/03-backend-pm2.png)
 
-## Step 6 — Nginx Reverse Proxy Working
-![Nginx serving app](screenshots/06-nginx.png)
-*`sudo nginx -t` OK and the app loading at `http://<EC2_IP>/`.*
+`pm2 status` showing `travel-backend` online, plus a `curl localhost:3000/trip`.
 
-## Step 7 — Multiple Instances + Load Balancer
-![Target group healthy](screenshots/07-target-group.png)
-*Target group showing both instances **healthy**.*
+## 4. Backend .env
+![backend env](screenshots/04-backend-env.png)
 
-![ALB serving app](screenshots/08-alb.png)
-*App loading via the ALB DNS name.*
+`backend/.env` with the Mongo URI (password blurred) and `PORT=3000`.
 
-## Step 8 — Cloudflare DNS Records
-![Cloudflare DNS](screenshots/09-cloudflare-dns.png)
-*CNAME → ALB endpoint and A record → EC2 IP, both proxied.*
+## 5. Frontend built
+![frontend build](screenshots/05-frontend-build.png)
 
-## Step 9 — Live Application on Custom Domain
-![Live app over HTTPS](screenshots/10-live-domain.png)
-*App loading at `https://<your-domain>` with a valid certificate.*
+`npm run build` finishing, and `url.js` / `.env` pointing at `/api`.
 
-## Step 10 — Architecture Diagram
-![Architecture diagram](screenshots/11-architecture.png)
-*Exported PNG of `architecture/travelmemory-architecture.drawio`.*
+## 6. Nginx serving the app
+![app via nginx](screenshots/06-nginx.png)
 
----
+The app loading at the instance IP. This is the real screenshot from my run - it
+shows the trip I added rendering through Nginx.
 
-### Notes / Decisions
-- Backend standardized on **port 3000** per the assignment (upstream README uses 3001).
-- Frontend file is `url.js` (the assignment text says `urls.js`).
-- Chose Nginx **Pattern A** (static frontend + `/api` proxy) to avoid CORS issues.
+## 7. Load balancer
+![target group healthy](screenshots/07-target-group.png)
+
+Both targets healthy in the target group.
+
+![app via ALB](screenshots/08-alb.png)
+
+The same app served through the load balancer DNS name. Also a real screenshot.
+
+## 8. Cloudflare DNS
+![cloudflare dns](screenshots/09-cloudflare-dns.png)
+
+CNAME to the ALB and A record to an instance IP (documented step).
+
+## 9. Live on the domain
+![live over https](screenshots/10-live-domain.png)
+
+The app over HTTPS on the custom domain (documented step).
+
+## 10. Architecture diagram
+![architecture](screenshots/11-architecture.png)
+
+Exported from `architecture/travelmemory-architecture.drawio`.
+
+## Notes
+
+A few decisions worth calling out:
+
+* Backend is on port 3000 because the assignment asks for it, even though the
+  upstream repo defaults to 3001.
+* The frontend config file is `url.js`, not `urls.js` like the brief says.
+* I went with the Nginx setup that serves the static build and proxies `/api` on
+  the same host. Keeping it same-origin meant no CORS configuration to fight with.

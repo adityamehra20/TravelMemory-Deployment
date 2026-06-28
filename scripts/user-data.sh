@@ -1,20 +1,17 @@
 #!/bin/bash
-# =============================================================================
-# TravelMemory EC2 bootstrap (EC2 "User data" script)
-# Paste this into the "User data" field when launching an Ubuntu 22.04 instance,
-# or run it manually after SSH. It installs Node, Nginx, PM2, clones the app,
-# configures the backend (.env), builds the frontend, and wires up Nginx.
-#
-# EDIT the two variables in the CONFIG section before use.
-# =============================================================================
+# TravelMemory EC2 bootstrap.
+# Use this as the EC2 "User data" when launching an Ubuntu 22.04 box, or just SSH
+# in and run it. It installs Node/Nginx/PM2, clones the app, sets up the backend
+# .env, builds the frontend and configures Nginx.
+# Set MONGO_URI in the CONFIG block below before running.
 set -euxo pipefail
 
-# ---------------------------- CONFIG (EDIT ME) -------------------------------
+# --- CONFIG ---
 MONGO_URI="mongodb+srv://<user>:<password>@<cluster>.mongodb.net/travelmemory?retryWrites=true&w=majority"
 BACKEND_PORT=3000
-# With Nginx Pattern A the browser calls same-origin /api, so this stays "/api".
+# Nginx proxies same-origin /api, so the frontend just uses /api.
 FRONTEND_BACKEND_URL="/api"
-# -----------------------------------------------------------------------------
+# --------------
 
 export DEBIAN_FRONTEND=noninteractive
 APP_USER="ubuntu"

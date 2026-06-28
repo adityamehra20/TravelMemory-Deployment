@@ -1,114 +1,58 @@
-# TravelMemory Application Deployment on AWS EC2
+# TravelMemory on AWS
 
-A complete, reproducible guide to deploying the **TravelMemory** MERN-stack
-application on Amazon EC2 with **Nginx** as a reverse proxy, an **Application
-Load Balancer (ALB)** for horizontal scaling, and a **custom domain managed
-through Cloudflare**.
+This is my deployment of the TravelMemory MERN app on AWS. The app itself comes
+from https://github.com/UnpredictablePrashant/TravelMemory - I didn't write the
+application, the work here is getting it running on EC2 behind Nginx and a load
+balancer, with the database on MongoDB Atlas.
 
-> Original application repository: <https://github.com/UnpredictablePrashant/TravelMemory>
+The setup, in short:
 
----
+* Two Ubuntu EC2 instances, each running the Node backend on port 3000 (kept
+  alive with PM2) and Nginx on port 80.
+* Nginx serves the React build as static files and proxies `/api` to the backend
+  on the same box. This avoids CORS headaches.
+* An Application Load Balancer in front of both instances, spread across two
+  availability zones.
+* MongoDB Atlas for the database.
+* Cloudflare for the custom domain (CNAME to the load balancer, A record to a
+  frontend instance).
 
-## Table of Contents
+There's a diagram in `architecture/` and a rendered version at
+`screenshots/11-architecture.png`.
 
-1. [Architecture Overview](#1-architecture-overview)
-2. [Prerequisites](#2-prerequisites)
-3. [Backend Configuration](#3-backend-configuration)
-4. [Frontend & Backend Connection](#4-frontend--backend-connection)
-5. [Nginx Reverse Proxy](#5-nginx-reverse-proxy)
-6. [Scaling with Multiple Instances + Load Balancer](#6-scaling-with-multiple-instances--load-balancer)
-7. [Domain Setup with Cloudflare](#7-domain-setup-with-cloudflare)
-8. [Verification & Testing](#8-verification--testing)
-9. [Security Best Practices](#9-security-best-practices)
-10. [Troubleshooting](#10-troubleshooting)
-11. [Deliverables Checklist](#11-deliverables-checklist)
+## What got deployed
 
----
+The live values from my run are in [SUBMISSION.txt](SUBMISSION.txt). Quick
+version:
 
-## 1. Architecture Overview
+* Account `145678291577`, region `ap-south-1`
+* Instances `i-0f063ccb3d08dad9a` (65.1.136.12, ap-south-1a) and
+  `i-07c84e906535f48dd` (13.233.80.192, ap-south-1b), both t2.micro
+* Load balancer `travelmemory-alb`, endpoint
+  `http://travelmemory-alb-376816329.ap-south-1.elb.amazonaws.com/`
+* Target group `travelmemory-tg`, both targets healthy
 
-```
-                          ┌────────────────────────┐
-        Custom Domain ──► │       Cloudflare       │  (DNS + proxy/SSL)
-   (e.g. travelapp.com)   │  A record + CNAME      │
-                          └───────────┬────────────┘
-                                      │
-                          ┌───────────▼────────────┐
-                          │  Application Load       │
-                          │  Balancer (ALB)         │
-                          └─────┬─────────────┬─────┘
-                                │             │
-                    ┌───────────▼───┐   ┌─────▼─────────┐
-                    │  EC2 Instance │   │  EC2 Instance │   (Target Group)
-                    │      #1       │   │      #2       │
-                    │  Nginx :80    │   │  Nginx :80    │
-                    │   │           │   │   │           │
-                    │   ├─ Frontend │   │   ├─ Frontend │  React build (static)
-                    │   └─ /api ──► │   │   └─ /api ──► │  proxy_pass
-                    │   Node :3000  │   │   Node :3000  │  Express backend
-                    └───────┬───────┘   └───────┬───────┘
-                            │                   │
-                            └─────────┬─────────┘
-                                      │
-                          ┌───────────▼────────────┐
-                          │   MongoDB Atlas         │  (managed database)
-                          └────────────────────────┘
-```
+Everything returns 200 - the raw AWS CLI output I captured is in
+`screenshots/VERIFICATION.txt`.
 
-See [`architecture/travelmemory-architecture.drawio`](architecture/travelmemory-architecture.drawio)
-for the editable diagram (open at <https://app.diagrams.net>).
+## Backend
 
----
+Launch an Ubuntu 22.04 instance (t2.micro is fine). Security group inbound:
 
-## 2. Prerequisites
+* 22 from my IP only
+* 80 from anywhere (later locked to the load balancer's SG)
+* 3000 only from within the SG, just for debugging - never public
 
-| Requirement | Notes |
-|-------------|-------|
-| AWS account | With permission to create EC2, Security Groups, ALB, Target Groups |
-| MongoDB Atlas cluster | Free M0 tier is sufficient; get the connection string |
-| A registered domain | Added to a Cloudflare account |
-| Key pair (`.pem`) | For SSH access to EC2 |
-| Local tools | `git`, an SSH client, a browser |
-
-**Recommended AMI:** Ubuntu Server 22.04 LTS, `t2.micro` (free tier) or `t3.small`.
-
----
-
-## 3. Backend Configuration
-
-### 3.1 Launch an EC2 instance
-
-1. EC2 → **Launch instance** → Ubuntu 22.04 LTS.
-2. Instance type `t2.micro`.
-3. Create/select a key pair.
-4. **Security group** inbound rules:
-   - SSH (22) — *My IP only*
-   - HTTP (80) — `0.0.0.0/0`
-   - HTTPS (443) — `0.0.0.0/0`
-   - Custom TCP (3000) — *only from the Security Group / your IP* (for debugging; not public)
-5. Launch and note the **public IPv4**.
-
-### 3.2 Connect and install dependencies
+SSH in and install the basics:
 
 ```bash
-ssh -i "your-key.pem" ubuntu@<EC2_PUBLIC_IP>
-
-# Update system
 sudo apt update && sudo apt upgrade -y
-
-# Install Node.js 18 LTS
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt install -y nodejs
-
-# Install Nginx, git, and PM2 (process manager)
-sudo apt install -y nginx git
+sudo apt install -y nodejs nginx git
 sudo npm install -g pm2
-
-# Verify
-node -v && npm -v && nginx -v
 ```
 
-### 3.3 Clone the repository
+Clone the app and set up the backend:
 
 ```bash
 cd ~
@@ -117,94 +61,65 @@ cd TravelMemory/backend
 npm install
 ```
 
-### 3.4 Create the backend `.env`
-
-The assignment requires the backend to run on **port 3000**.
-Create `backend/.env` (see [`code/backend/.env.example`](code/backend/.env.example)):
+The assignment wants the backend on port 3000 (the upstream repo uses 3001, so I
+changed it). Create `backend/.env`:
 
 ```env
 MONGO_URI='mongodb+srv://<user>:<password>@<cluster>.mongodb.net/travelmemory?retryWrites=true&w=majority'
 PORT=3000
 ```
 
-> **Security:** never commit real credentials. `.env` is already in `.gitignore`.
-> In MongoDB Atlas, add your EC2 instance IP (or `0.0.0.0/0` for testing only)
-> to the **Network Access** allow-list.
+Don't commit this. `.env` is in `.gitignore`. Also remember to add the instance
+IP (or 0.0.0.0/0 if you're just testing) to Network Access in Atlas, otherwise
+the connection just times out.
 
-### 3.5 Run the backend with PM2
+Run it under PM2 so it survives reboots:
 
 ```bash
 cd ~/TravelMemory/backend
 pm2 start index.js --name travel-backend
 pm2 save
-pm2 startup        # run the command it prints to enable boot-start
+pm2 startup     # run whatever command it prints
 pm2 status
+curl http://localhost:3000/trip   # should return JSON
 ```
 
-Quick local check:
+## Wiring the frontend to the backend
 
-```bash
-curl http://localhost:3000/trip       # should return JSON (array)
-```
-
----
-
-## 4. Frontend & Backend Connection
-
-The frontend reads the backend URL from an environment variable that is consumed
-by [`frontend/src/url.js`](code/frontend/src/url.js).
-
-### 4.1 `frontend/src/url.js`
+The frontend reads the backend URL from `frontend/src/url.js` (the assignment
+text calls it `urls.js`, but the actual file is `url.js`):
 
 ```js
 export const baseUrl = process.env.REACT_APP_BACKEND_URL;
 ```
 
-### 4.2 Create `frontend/.env`
-
-Point the frontend at the **public endpoint** that serves the API. Because Nginx
-proxies `/api` to the backend on the same host, use a relative path or the
-domain:
+Because Nginx proxies `/api` on the same host, I point the frontend at a relative
+path. `frontend/.env`:
 
 ```env
-# When served behind Nginx + domain (recommended)
-REACT_APP_BACKEND_URL=https://api.<your-domain>.com
-
-# OR during early testing against the EC2 IP
-# REACT_APP_BACKEND_URL=http://<EC2_PUBLIC_IP>:3000
+REACT_APP_BACKEND_URL=/api
 ```
 
-See [`code/frontend/.env.example`](code/frontend/.env.example).
-
-### 4.3 Build the frontend
+Then build it:
 
 ```bash
 cd ~/TravelMemory/frontend
 npm install
-npm run build      # produces an optimized static build in ./build
+npm run build
 ```
 
-The `build/` folder is what Nginx will serve.
+Heads up: the React build can run out of memory on a t2.micro (1 GB RAM). I added
+a 2 GB swap file before building - the bootstrap script does this automatically.
 
----
+## Nginx
 
-## 5. Nginx Reverse Proxy
-
-The assignment requires a reverse proxy so the app is reachable on port 80
-(and 443) instead of exposing Node on 3000.
-
-Two common patterns — pick **one**:
-
-### Pattern A — Single server, frontend static + `/api` proxy (recommended)
-
-Use [`code/nginx/travelmemory.conf`](code/nginx/travelmemory.conf):
+One server block: serve the React build, proxy `/api` to the backend.
 
 ```nginx
 server {
     listen 80;
     server_name _;
 
-    # Serve the React production build
     root /home/ubuntu/TravelMemory/frontend/build;
     index index.html;
 
@@ -212,37 +127,9 @@ server {
         try_files $uri /index.html;
     }
 
-    # Reverse-proxy API calls to the Node backend on port 3000
     location /api/ {
         proxy_pass http://localhost:3000/;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_cache_bypass $http_upgrade;
-    }
-}
-```
-
-> With this pattern set `REACT_APP_BACKEND_URL=/api` so the browser calls the
-> same origin and Nginx forwards to the backend.
-
-### Pattern B — Pure reverse proxy to backend (separate frontend host)
-
-Use [`code/nginx/reverse-proxy.conf`](code/nginx/reverse-proxy.conf) when the
-backend EC2 only runs the API:
-
-```nginx
-server {
-    listen 80;
-    server_name _;
-
-    location / {
-        proxy_pass http://localhost:3000;
-        proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -251,194 +138,110 @@ server {
 }
 ```
 
-### Enable the site
+Enable it:
 
 ```bash
-# Copy the chosen config
-sudo cp ~/TravelMemory/code/nginx/travelmemory.conf /etc/nginx/sites-available/travelmemory
-
-# Enable it and disable the default
+sudo cp travelmemory.conf /etc/nginx/sites-available/travelmemory
 sudo ln -s /etc/nginx/sites-available/travelmemory /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default
-
-# Test config and reload
+sudo chmod o+x /home/ubuntu        # see note below
 sudo nginx -t
 sudo systemctl restart nginx
 ```
 
-Browse to `http://<EC2_PUBLIC_IP>/` — the app should load and talk to the API.
+That `chmod o+x /home/ubuntu` line cost me a while. Nginx runs as `www-data` and
+couldn't traverse into `/home/ubuntu` to reach the build folder, so every request
+was a 500. Adding execute-for-others on the home dir fixed it. The config I used
+is in `code/nginx/`.
 
----
+After this, `http://<instance-ip>/` loads the app.
 
-## 6. Scaling with Multiple Instances + Load Balancer
+## Second instance + load balancer
 
-### 6.1 Create a reusable image
+Once the first instance worked, I made an AMI from it (Actions -> Image -> Create
+image) and launched a second instance from that image in a different AZ. PM2's
+startup hook and the Nginx service both come back on boot, so the second box was
+ready without much fiddling.
 
-1. Once instance #1 is fully working, EC2 → **Actions → Image → Create image**.
-2. Launch **instance #2** (and more) from that AMI — they boot pre-configured.
-   - PM2 `startup` ensures the backend auto-starts.
-   - Nginx auto-starts as a systemd service.
+Target group: type Instances, HTTP on port 80, health check path `/`. Register
+both instances.
 
-### 6.2 Create a Target Group
+Load balancer: internet-facing ALB, two AZs, HTTP listener on 80 forwarding to
+the target group. Give the ALB its own security group allowing 80 in from
+anywhere, then change the instance security group so port 80 only accepts traffic
+from the ALB's SG. That way nobody can hit the instances directly once the LB is
+up.
 
-1. EC2 → **Target Groups → Create target group**.
-2. Type: **Instances**, protocol **HTTP**, port **80**.
-3. **Health check path:** `/` (frontend) or `/api/trip` (API).
-4. Register instance #1 and instance #2.
+The ALB DNS name is what you hand to Cloudflare.
 
-### 6.3 Create an Application Load Balancer
+> One thing that bit me: the VPC I was given had no internet gateway and the
+> subnets were on private route tables. The instances booted with no internet
+> (so the bootstrap failed) and weren't reachable. I had to create an IGW, a
+> public route table with a default route to it, and repoint the subnet route
+> table associations. If you're using a default VPC you won't hit this.
 
-1. EC2 → **Load Balancers → Create → Application Load Balancer**.
-2. Scheme: **internet-facing**, IP type IPv4.
-3. Map at least **two Availability Zones** (and put instances across them for
-   resilience).
-4. Listener: **HTTP :80** → forward to the Target Group above.
-5. ALB security group: allow inbound 80/443 from `0.0.0.0/0`.
-6. Note the ALB **DNS name** (e.g. `travel-alb-123456.us-east-1.elb.amazonaws.com`).
+## Cloudflare domain
 
-### 6.4 Lock down the instances
+Add the domain to Cloudflare and switch the registrar's nameservers to the ones
+Cloudflare gives you. Once it's active, add two records:
 
-Update each EC2 security group so port 80 only accepts traffic **from the ALB's
-security group** (not the whole internet). This forces all traffic through the
-load balancer.
+| Type  | Name  | Target                                  | Proxy   |
+|-------|-------|-----------------------------------------|---------|
+| CNAME | app   | the ALB DNS name                        | Proxied |
+| A     | @     | a frontend instance's public IP         | Proxied |
 
-Test: open `http://<ALB_DNS_NAME>/` — refreshing should be served by either
-instance (check via different instance hostnames in logs).
+The CNAME points the subdomain at the load balancer; the A record maps the root
+to an instance IP (a root record needs an IP, not a DNS name, which is why the LB
+goes on a subdomain). Set SSL/TLS to Full and turn on Always Use HTTPS.
 
----
+I didn't own a domain for the graded run, so the live URL is the raw ALB endpoint
+and this section is the documented step to finish it.
 
-## 7. Domain Setup with Cloudflare
+## Checking it works
 
-### 7.1 Add your domain to Cloudflare
-
-1. Cloudflare dashboard → **Add a site** → enter your domain.
-2. Update your registrar's nameservers to the two Cloudflare nameservers shown.
-3. Wait for activation (status **Active**).
-
-### 7.2 DNS records (per the assignment)
-
-| Type  | Name              | Target                              | Proxy   | Purpose |
-|-------|-------------------|-------------------------------------|---------|---------|
-| CNAME | `www` (or `app`)  | `<ALB_DNS_NAME>`                    | Proxied | Route traffic to the load balancer |
-| A     | `@` (root/front)  | `<EC2_PUBLIC_IP of frontend host>`  | Proxied | Connect the EC2 frontend instance via IP |
-
-> **Hint from the assignment:** the **CNAME** links the **load-balancer
-> endpoint**, while the **A record** maps an **EC2 instance IP**.
-> If you want the apex/root domain on the ALB, use a CNAME on a subdomain
-> (e.g. `app.your-domain.com`) because a root A record needs an IP, not a DNS
-> name.
-
-### 7.3 SSL/TLS
-
-1. Cloudflare → **SSL/TLS → Overview** → set mode to **Full** (or **Full
-   (strict)** if you install a cert/Origin Certificate on Nginx).
-2. Enable **Always Use HTTPS** under SSL/TLS → Edge Certificates.
-
-After DNS propagates, visit `https://www.<your-domain>.com`.
-
----
-
-## 8. Verification & Testing
-
-| Check | Command / Action | Expected |
-|-------|------------------|----------|
-| Backend up | `curl http://localhost:3000/trip` | JSON response |
-| Nginx proxy | `curl http://<EC2_IP>/api/trip` | JSON response |
-| Frontend | Open `http://<EC2_IP>/` | App loads, data renders |
-| Load balancer | Open `http://<ALB_DNS>/` | App loads via ALB |
-| Target health | EC2 → Target Group → Targets | All **healthy** |
-| Domain | Open `https://<your-domain>` | App loads over HTTPS |
-| Add a trip | Submit the form in the UI | Record saved, appears in list |
-
----
-
-## 9. Security Best Practices
-
-- **Least-privilege security groups:** SSH from your IP only; port 3000 never
-  public; instance port 80 only from the ALB SG.
-- **Secrets:** keep `MONGO_URI` in `.env`; never commit it. Rotate Atlas
-  credentials if exposed.
-- **MongoDB Atlas:** restrict Network Access to instance IPs, enable auth.
-- **HTTPS everywhere:** Cloudflare Full (strict) + HTTP→HTTPS redirect.
-- **Updates:** `sudo apt update && sudo apt upgrade` regularly; keep Node/Nginx patched.
-- **PM2:** run the app as a non-root user (`ubuntu`), not root.
-- **Cloudflare WAF / rate limiting** to absorb abusive traffic.
-
----
-
-## 10. Troubleshooting
-
-| Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| `502 Bad Gateway` from Nginx | Backend not running | `pm2 status`, `pm2 logs travel-backend` |
-| Frontend loads but no data | Wrong `REACT_APP_BACKEND_URL` | Rebuild after editing `frontend/.env` |
-| CORS errors | Backend origin mismatch | Use same-origin `/api` proxy (Pattern A) |
-| Target shows **unhealthy** | Health check path wrong | Set TG health check to `/` or `/api/trip` |
-| Mongo connection timeout | Atlas IP allow-list | Add EC2 IP in Atlas Network Access |
-| Changes to React not visible | Served old build | `npm run build` then reload Nginx |
-
----
-
-## 11. Deliverables Checklist
-
-- [x] Backend running on Node.js (port 3000) via PM2
-- [x] Nginx reverse proxy configured
-- [x] `.env` with DB connection + port
-- [x] `frontend/src/url.js` wired to backend
-- [x] Multiple instances behind an ALB
-- [x] Cloudflare CNAME (→ ALB) + A record (→ EC2 IP)
-- [x] This documentation with steps + screenshot placeholders
-- [x] draw.io architecture diagram (`architecture/`)
-- [x] Repository link submitted on Vlearn
-
-> **Screenshots:** add yours under [`screenshots/`](screenshots/) and reference
-> them in [DEPLOYMENT.md](DEPLOYMENT.md) where placeholders are marked.
-
----
-
-## Appendix A — Live Deployment (this submission)
-
-This repository was deployed end-to-end on AWS. Live, verified values:
-
-| Resource | Value |
-|----------|-------|
-| AWS account / region | `145678291577` / `ap-south-1` |
-| EC2 instance #1 | `i-0f063ccb3d08dad9a` — `ap-south-1a` — `65.1.136.12` |
-| EC2 instance #2 | `i-07c84e906535f48dd` — `ap-south-1b` — `13.233.80.192` |
-| Instance type | `t2.micro` (Ubuntu 22.04) |
-| Load Balancer | `travelmemory-alb` (internet-facing, **active**) |
-| ALB endpoint | `http://travelmemory-alb-376816329.ap-south-1.elb.amazonaws.com/` |
-| Target Group | `travelmemory-tg` (HTTP:80) — both targets **healthy** |
-| Database | MongoDB Atlas (managed) |
-| Reverse proxy | Nginx :80 → React build (static) + `/api` → Node :3000 (Pattern A) |
-
-**Verification (all HTTP 200):**
-
-```
-ALB  /          -> 200
-ALB  /api/trip  -> 200
-Instance1 /     -> 200
-Instance2 /     -> 200
+```bash
+curl http://localhost:3000/trip                 # backend direct
+curl http://<instance-ip>/api/trip              # through Nginx
+curl http://<alb-dns>/api/trip                  # through the load balancer
 ```
 
-See [`screenshots/VERIFICATION.txt`](screenshots/VERIFICATION.txt) for the raw
-AWS CLI output (instances, load balancer, target health) captured live, and
-[`screenshots/08-alb.png`](screenshots/08-alb.png) /
-[`screenshots/06-nginx.png`](screenshots/06-nginx.png) for the running app.
+Open `http://<alb-dns>/` in a browser, add a trip via the form, and it should
+show up in the list. In the console the target group should show both targets
+healthy.
 
-### Final manual step — Cloudflare custom domain
+## Security notes
 
-The custom domain is the only step requiring a registered domain you own. Once
-you add the domain to Cloudflare (section 7), create:
+* SSH locked to my IP, port 3000 never exposed publicly, instance port 80 only
+  from the ALB SG.
+* `MONGO_URI` lives in `.env` and is never committed. If it ever leaks, rotate
+  the Atlas password.
+* Atlas Network Access should be the instance IPs rather than 0.0.0.0/0 once
+  you're past testing.
+* Backend runs as the `ubuntu` user under PM2, not root.
 
-| Type  | Name  | Target                                                       | Proxy   |
-|-------|-------|--------------------------------------------------------------|---------|
-| CNAME | `app` | `travelmemory-alb-376816329.ap-south-1.elb.amazonaws.com`    | Proxied |
-| A     | `@`   | `65.1.136.12` (frontend EC2 public IP)                       | Proxied |
+## Things that went wrong (and the fixes)
 
-Then set SSL/TLS mode to **Full** and enable **Always Use HTTPS**.
+* **Nginx 500 on every request** - `www-data` couldn't traverse `/home/ubuntu`.
+  Fixed with `chmod o+x /home/ubuntu`.
+* **Instances had no internet / weren't reachable** - private VPC with no IGW.
+  Created an internet gateway, a public route table, and reassociated the subnets.
+* **React build killed mid-way** - out of memory on t2.micro. Added a 2 GB swap
+  file.
+* **`querySrv ENOTFOUND` from Mongo** - the Atlas SRV record wasn't resolving
+  because the cluster was still spinning up. Waited, restarted the backend, fine
+  after that.
 
-### Teardown (avoid charges)
+## Files in this repo
 
-After grading, remove billable resources (ALB + 2× EC2). See the teardown
-commands in [RUNBOOK.md](RUNBOOK.md).
+* `code/` - the Nginx config and example env files
+* `scripts/` - the EC2 bootstrap script and the provisioning helper I used
+* `architecture/` - the draw.io diagram
+* `screenshots/` - app screenshots and the CLI verification output
+* `DEPLOYMENT.md` - step-by-step with screenshots
+* `RUNBOOK.md` - the exact commands I ran
+
+## Tearing it down
+
+Two EC2 instances plus an ALB cost money, so after grading delete them. Rough
+order: load balancer, then target group, then the instances, then the security
+groups. The commands are in [RUNBOOK.md](RUNBOOK.md).

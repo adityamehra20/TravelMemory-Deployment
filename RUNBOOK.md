@@ -1,70 +1,89 @@
-# Deployment Runbook — What YOU run, what to screenshot
+# Runbook
 
-This automates the deployment as far as possible. The steps requiring your
-authenticated AWS session and a browser (SSO login, console screenshots,
-Cloudflare) must be done by you — they cannot be automated from an assistant.
+The actual commands I ran, in order. The bits that need a browser (AWS SSO login,
+console screenshots, Cloudflare) can't be scripted, so those are manual.
 
-## A. One-time local setup
+## Local setup
 
-1. **Install AWS CLI v2** (Windows):
-   ```powershell
-   winget install -e --id Amazon.AWSCLI
-   ```
-   Open a new terminal, then verify: `aws --version`.
+Install the AWS CLI on Windows:
 
-2. **Configure SSO** against your portal `https://herovired-devops.awsapps.com/start`:
-   ```powershell
-   aws configure sso
-   # SSO start URL: https://herovired-devops.awsapps.com/start
-   # SSO region:    (the region shown in the portal, e.g. us-east-1)
-   # Pick your account + role, give the profile a name, default region, output=json
-   ```
-   Then log in (opens a browser for you to authenticate with MFA):
-   ```powershell
-   aws sso login --profile <your-profile>
-   $env:AWS_PROFILE = "<your-profile>"
-   aws sts get-caller-identity        # confirms you are authenticated
-   ```
-   > Type your credentials/MFA directly in the browser — never share them here.
+```powershell
+winget install -e --id Amazon.AWSCLI
+```
 
-## B. Provision the infrastructure
+Open a fresh terminal and check `aws --version`. Then configure SSO against the
+portal:
 
-1. Edit [scripts/user-data.sh](scripts/user-data.sh) → set your real `MONGO_URI`.
-2. Edit [scripts/provision-aws.sh](scripts/provision-aws.sh) → set `REGION`,
-   `KEY_NAME` (an existing EC2 key pair), and `AMI_ID` (command to find it is in
-   the file).
-3. Run it from a Bash shell (Git Bash or WSL):
-   ```bash
-   cd /c/Users/adity/TravelMemory-Deployment
-   bash scripts/provision-aws.sh
-   ```
-   It prints the **ALB DNS name** at the end — save it for Cloudflare.
+```powershell
+aws configure sso
+# start URL: https://herovired-devops.awsapps.com/start
+# pick the account + role, name the profile, region ap-south-1, output json
+```
 
-## C. Cloudflare (browser)
+Log in (this opens a browser for MFA - type credentials there, not in any tool):
 
-1. Add your domain to Cloudflare and switch nameservers at your registrar.
-2. DNS records:
-   - **CNAME** `app` → `<ALB_DNS_NAME>` (Proxied)
-   - **A** `@` → `<EC2_PUBLIC_IP of the frontend instance>` (Proxied)
-3. SSL/TLS → **Full** (or Full strict) + **Always Use HTTPS**.
+```powershell
+aws sso login --profile herovired
+$env:AWS_PROFILE = "herovired"
+aws sts get-caller-identity
+```
 
-## D. Screenshots to capture (save into ./screenshots)
+One gotcha on Windows: each new PowerShell needs the PATH refreshed and the pager
+turned off, otherwise the CLI hangs on long output:
 
-| File | Where | What to show |
-|------|-------|--------------|
-| `01-ec2-instance.png`  | EC2 → Instances | Both instances **running** + public IPs |
-| `02-dependencies.png`  | SSH terminal | `node -v`, `nginx -v`, `pm2 -v` |
-| `03-backend-pm2.png`   | SSH terminal | `pm2 status` + `curl localhost:3000/trip` |
-| `04-backend-env.png`   | SSH terminal | `backend/.env` (redact the password) |
-| `05-frontend-build.png`| SSH terminal | `npm run build` success |
-| `06-nginx.png`         | Browser | App at `http://<EC2_IP>/` |
-| `07-target-group.png`  | EC2 → Target Groups | Both targets **healthy** |
-| `08-alb.png`           | Browser | App at `http://<ALB_DNS>/` |
-| `09-cloudflare-dns.png`| Cloudflare → DNS | CNAME → ALB and A → EC2 IP |
-| `10-live-domain.png`   | Browser | App at `https://<your-domain>` |
-| `11-architecture.png`  | draw.io | Exported diagram PNG |
+```powershell
+$env:Path=[Environment]::GetEnvironmentVariable("Path","Machine")+";"+[Environment]::GetEnvironmentVariable("Path","User")
+$env:AWS_PROFILE="herovired"
+$env:AWS_PAGER=""
+```
 
-## E. Publish to GitHub
+## Provisioning
+
+Two scripts do the heavy lifting:
+
+* `scripts/user-data.sh` - the EC2 bootstrap (installs everything, configures the
+  backend, builds the frontend, wires up Nginx). Edit the `MONGO_URI` at the top
+  before using it.
+* `scripts/provision-herovired.ps1` - what I actually ran. It reads the Mongo URI
+  from `secrets.env`, creates the security groups, launches two instances,
+  creates the target group and the load balancer, and prints the resource IDs.
+
+The generic Bash version is `scripts/provision-aws.sh` if you'd rather run it from
+Git Bash or WSL.
+
+If a VPC has no internet gateway (mine didn't), the instances boot with no network
+and the bootstrap fails. Create an IGW, a public route table with
+`0.0.0.0/0 -> igw`, associate the subnets with it, and turn on auto-assign public
+IP. Then relaunch or re-run the bootstrap over SSH.
+
+## Cloudflare
+
+In the browser:
+
+1. Add the domain, switch nameservers at the registrar.
+2. DNS records: CNAME `app` -> ALB DNS (proxied), A `@` -> a frontend instance IP
+   (proxied).
+3. SSL/TLS set to Full, turn on Always Use HTTPS.
+
+## Screenshots to grab
+
+Save these into `screenshots/`:
+
+| File | Where | What |
+|------|-------|------|
+| 01-ec2-instance.png | EC2 console | instances running + IPs |
+| 02-dependencies.png | SSH | node/nginx/pm2 versions |
+| 03-backend-pm2.png | SSH | pm2 status + curl localhost:3000/trip |
+| 04-backend-env.png | SSH | backend/.env (blur the password) |
+| 05-frontend-build.png | SSH | npm run build finishing |
+| 06-nginx.png | browser | app at the instance IP |
+| 07-target-group.png | EC2 console | both targets healthy |
+| 08-alb.png | browser | app at the ALB DNS |
+| 09-cloudflare-dns.png | Cloudflare | the two DNS records |
+| 10-live-domain.png | browser | app over HTTPS |
+| 11-architecture.png | draw.io | exported diagram |
+
+## Push to GitHub
 
 ```powershell
 cd C:\Users\adity\TravelMemory-Deployment
@@ -73,12 +92,15 @@ git commit -m "Add deployment screenshots"
 git push
 ```
 
-## F. Teardown (avoid charges when done / graded)
+## Teardown
+
+Delete in reverse order so nothing's still referenced:
 
 ```bash
-# Delete in reverse order: listener/ALB, target group, instances, security groups
-aws elbv2 delete-load-balancer --load-balancer-arn <ALB_ARN> --region <REGION>
-aws elbv2 delete-target-group  --target-group-arn  <TG_ARN>  --region <REGION>
-aws ec2 terminate-instances --instance-ids <ID1> <ID2> --region <REGION>
-# After instances terminate, delete the two security groups.
+aws elbv2 delete-load-balancer --load-balancer-arn <ALB_ARN>
+aws elbv2 delete-target-group  --target-group-arn  <TG_ARN>
+aws ec2 terminate-instances --instance-ids <ID1> <ID2>
+# once the instances are gone, delete the two security groups
 ```
+
+For my run those IDs are in `SUBMISSION.txt` / `screenshots/VERIFICATION.txt`.

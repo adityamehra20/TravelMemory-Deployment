@@ -1,37 +1,36 @@
-Graded Assignment: Travel Memory Application Deployment
-=======================================================
+Travel Memory Application Deployment
+====================================
 
 Submitted by: Project Submission
 Date: 28-06-2026
 
-GitHub Repository (deployment code + documentation + architecture diagram):
----------------------------------------------------------------------------
-https://github.com/adityamehra20/TravelMemory-Deployment
+GitHub repo (code, docs, diagram):
+  https://github.com/adityamehra20/TravelMemory-Deployment
 
-Live Application URL (Application Load Balancer endpoint):
----------------------------------------------------------
-http://travelmemory-alb-376816329.ap-south-1.elb.amazonaws.com/
+Live app (load balancer endpoint):
+  http://travelmemory-alb-376816329.ap-south-1.elb.amazonaws.com/
 
-  Note: a Cloudflare custom domain (CNAME -> ALB DNS, A record -> EC2 IP)
-  is documented in README.md section 7 as the final manual step. It requires
-  a registered domain on a Cloudflare account.
+  I didn't have a domain to put on Cloudflare for the graded run, so the live
+  URL is the raw ALB endpoint. The Cloudflare step (CNAME to the ALB, A record
+  to an instance IP) is written up in README.md as the step to finish it off.
 
-Live Deployment Details (AWS account 145678291577, region ap-south-1):
-----------------------------------------------------------------------
-- EC2 instance #1 : i-0f063ccb3d08dad9a  (ap-south-1a)  65.1.136.12
-- EC2 instance #2 : i-07c84e906535f48dd  (ap-south-1b)  13.233.80.192
-- Load Balancer   : travelmemory-alb (internet-facing, active)
-- Target Group    : travelmemory-tg (HTTP:80, both targets HEALTHY)
-- Database        : MongoDB Atlas (managed)
-- Reverse proxy   : Nginx :80 -> React build (static) + /api -> Node :3000
+What's running (AWS account 145678291577, region ap-south-1):
+  - EC2 #1: i-0f063ccb3d08dad9a   ap-south-1a   65.1.136.12
+  - EC2 #2: i-07c84e906535f48dd   ap-south-1b   13.233.80.192
+  - Both t2.micro, Ubuntu 22.04
+  - Load balancer: travelmemory-alb (internet-facing, active)
+  - Target group: travelmemory-tg (HTTP:80, both targets healthy)
+  - Database: MongoDB Atlas
+  - Nginx on :80 serving the React build and proxying /api to Node on :3000
 
-Verification: all endpoints return HTTP 200 (see screenshots/VERIFICATION.txt).
+All endpoints return 200. The raw AWS CLI output is in
+screenshots/VERIFICATION.txt.
 
-Contents of the repository:
----------------------------
-- README.md ............. Full step-by-step deployment guide
-- DEPLOYMENT.md ......... Walkthrough with screenshots
-- architecture/ ......... draw.io architecture diagram
-- code/ ................. nginx configs, backend/.env example, frontend url.js + .env example
-- screenshots/ .......... deployment screenshots + VERIFICATION.txt
-- scripts/ .............. provisioning + EC2 bootstrap automation
+Repo layout:
+  README.md      - the deployment writeup
+  DEPLOYMENT.md  - walkthrough with screenshots
+  RUNBOOK.md     - the commands I ran
+  architecture/  - draw.io diagram
+  code/          - nginx config + example env files
+  scripts/       - bootstrap + provisioning
+  screenshots/   - screenshots + VERIFICATION.txt
