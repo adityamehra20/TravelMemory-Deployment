@@ -26,10 +26,10 @@ The live values from my run are in [SUBMISSION.txt](SUBMISSION.txt). Quick
 version:
 
 * Account `145678291577`, region `ap-south-1`
-* Instances `i-0f063ccb3d08dad9a` (65.1.136.12, ap-south-1a) and
-  `i-07c84e906535f48dd` (13.233.80.192, ap-south-1b), both t2.micro
+* Instances `i-0f063ccb3d08dad9a` (43.205.140.119, ap-south-1a) and
+  `i-07c84e906535f48dd` (13.126.149.6, ap-south-1b), both t2.micro
 * Load balancer `travelmemory-alb`, endpoint
-  `http://travelmemory-alb-376816329.ap-south-1.elb.amazonaws.com/`
+  `http://travelmemory-alb-746659424.ap-south-1.elb.amazonaws.com/`
 * Target group `travelmemory-tg`, both targets healthy
 
 Everything returns 200 - the raw AWS CLI output I captured is in

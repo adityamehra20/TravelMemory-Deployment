@@ -8,15 +8,15 @@ GitHub repo (code, docs, diagram):
   https://github.com/adityamehra20/TravelMemory-Deployment
 
 Live app (load balancer endpoint):
-  http://travelmemory-alb-376816329.ap-south-1.elb.amazonaws.com/
+  http://travelmemory-alb-746659424.ap-south-1.elb.amazonaws.com/
 
   I didn't have a domain to put on Cloudflare for the graded run, so the live
   URL is the raw ALB endpoint. The Cloudflare step (CNAME to the ALB, A record
   to an instance IP) is written up in README.md as the step to finish it off.
 
 What's running (AWS account 145678291577, region ap-south-1):
-  - EC2 #1: i-0f063ccb3d08dad9a   ap-south-1a   65.1.136.12
-  - EC2 #2: i-07c84e906535f48dd   ap-south-1b   13.233.80.192
+  - EC2 #1: i-0f063ccb3d08dad9a   ap-south-1a   43.205.140.119
+  - EC2 #2: i-07c84e906535f48dd   ap-south-1b   13.126.149.6
   - Both t2.micro, Ubuntu 22.04
   - Load balancer: travelmemory-alb (internet-facing, active)
   - Target group: travelmemory-tg (HTTP:80, both targets healthy)
