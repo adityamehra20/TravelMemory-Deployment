@@ -6,8 +6,7 @@ Date: <DD-MM-YYYY>
 
 GitHub Repository (deployment code + documentation + architecture diagram):
 ---------------------------------------------------------------------------
-<<< REPLACE WITH YOUR REPOSITORY URL >>>
-Example: https://github.com/<your-username>/TravelMemory-Deployment
+https://github.com/adityamehra20/TravelMemory-Deployment
 
 Live Application URL (custom domain via Cloudflare):
 ----------------------------------------------------
