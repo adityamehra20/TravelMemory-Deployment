@@ -1,0 +1,22 @@
+Graded Assignment: Travel Memory Application Deployment
+=======================================================
+
+Submitted by: <YOUR NAME>
+Date: <DD-MM-YYYY>
+
+GitHub Repository (deployment code + documentation + architecture diagram):
+---------------------------------------------------------------------------
+<<< REPLACE WITH YOUR REPOSITORY URL >>>
+Example: https://github.com/<your-username>/TravelMemory-Deployment
+
+Live Application URL (custom domain via Cloudflare):
+----------------------------------------------------
+https://<your-domain>
+
+Contents of the repository:
+---------------------------
+- README.md ............. Full step-by-step deployment guide
+- DEPLOYMENT.md ......... Walkthrough with screenshots
+- architecture/ ......... draw.io architecture diagram
+- code/ ................. nginx configs, backend/.env example, frontend url.js + .env example
+- screenshots/ .......... deployment screenshots
