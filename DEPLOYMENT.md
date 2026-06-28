@@ -11,7 +11,8 @@ have a domain to point at Cloudflare. The AWS side is all real and captured.
 ## 1. EC2 instance running
 ![EC2 instance running](screenshots/01-ec2-instance.png)
 
-The instance up with its public IP and security group.
+Both instances up and running with 2/2 status checks, one in ap-south-1a and one
+in ap-south-1b.
 
 ## 2. Dependencies installed
 ![node, nginx, pm2 versions](screenshots/02-dependencies.png)
@@ -62,6 +63,24 @@ The app over HTTPS on the custom domain (documented step).
 ![architecture](screenshots/11-architecture.png)
 
 Exported from `architecture/travelmemory-architecture.drawio`.
+
+## Extra console shots
+
+A few more from the EC2 console while everything was up.
+
+![load balancer active](screenshots/13-load-balancer.png)
+
+The `travelmemory-alb` load balancer, active, internet-facing, across 2 AZs.
+
+![EBS volumes](screenshots/14-volumes.png)
+
+The two 8 GiB root volumes, one per instance.
+
+![elastic IPs](screenshots/12-elastic-ips.png)
+
+The Elastic IP page. Note these two aren't associated with the instances (the
+deployment uses the auto-assigned public IPs), so they can be released to avoid
+the idle charge.
 
 ## Notes
 
