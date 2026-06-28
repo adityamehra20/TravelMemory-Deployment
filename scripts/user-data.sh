@@ -94,6 +94,8 @@ EOF
 
 ln -sf /etc/nginx/sites-available/travelmemory /etc/nginx/sites-enabled/travelmemory
 rm -f /etc/nginx/sites-enabled/default
+# Allow nginx (www-data) to traverse the home dir to reach the build folder
+chmod o+x /home/ubuntu
 nginx -t
 systemctl restart nginx
 
