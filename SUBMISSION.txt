@@ -1,7 +1,7 @@
 Graded Assignment: Travel Memory Application Deployment
 =======================================================
 
-Submitted by: project
+Submitted by: Project Submission
 Date: 28-06-2026
 
 GitHub Repository (deployment code + documentation + architecture diagram):
